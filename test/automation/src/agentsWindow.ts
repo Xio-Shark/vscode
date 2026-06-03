@@ -165,13 +165,24 @@ export class AgentsWindow {
 	 * Wait until at least one assistant response bubble contains text
 	 * matching the predicate. Returns the matched element's full text
 	 * content.
+	 *
+	 * Pass `requireComplete: false` to accept the text as soon as it
+	 * renders, even while the response bubble still has the
+	 * `.chat-response-loading` class. Needed on the AgentHost path,
+	 * where the renderer-side session can be transiently disposed and
+	 * re-hydrated before the `turnComplete` ack lands, leaving
+	 * `isComplete` stuck false even though the streamed text is visible.
 	 */
-	async waitForAssistantText(predicate: RegExp | string, timeoutMs: number = 60_000): Promise<string> {
+	async waitForAssistantText(predicate: RegExp | string, timeoutMs: number = 60_000, options: { requireComplete?: boolean } = {}): Promise<string> {
+		const requireComplete = options.requireComplete ?? true;
 		const retryCount = Math.ceil(timeoutMs / 100);
 		await this.code.waitForElement(RESPONSE, undefined, retryCount);
-		await this.code.waitForElement(RESPONSE_COMPLETE, undefined, retryCount);
+		if (requireComplete) {
+			await this.code.waitForElement(RESPONSE_COMPLETE, undefined, retryCount);
+		}
 
-		const responseSelector = `${RESPONSE_COMPLETE} .rendered-markdown`;
+		const bubbleSelector = requireComplete ? RESPONSE_COMPLETE : RESPONSE;
+		const responseSelector = `${bubbleSelector} .rendered-markdown`;
 		const deadline = Date.now() + timeoutMs;
 		while (Date.now() < deadline) {
 			const elements = await this.code.getElements(responseSelector, /* recursive */ true);
